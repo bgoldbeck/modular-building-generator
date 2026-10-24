@@ -7,6 +7,9 @@ surface so they land on the same Z as the walls standing on them.
 """
 import bmesh
 import bpy
+from mathutils import Vector
+
+from . import textures
 
 GRID = 1.0
 WALL_H = 3.0
@@ -20,6 +23,7 @@ INSET = 0.03        # plaster sits this far behind the timber faces
 ROOF_T = 0.12
 ROOF_D = ROOF_T * 2 ** 0.5  # vertical thickness of a 45 degree roof slab
 EAVE = 0.4          # how far eave pieces overhang past the wall face
+GRAIN_MATS = {"MB_Timber"}  # textures with a direction; turned to run along each piece
 
 MATERIALS = {
     "MB_Plaster": (0.85, 0.80, 0.68),
@@ -30,21 +34,46 @@ MATERIALS = {
 }
 
 
+def _setup_material(mat, name):
+    color = (*MATERIALS[name], 1.0)
+    mat.diffuse_color = color
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    out.location = (300, 0)
+    nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+    bsdf.inputs["Base Color"].default_value = color
+    textures.texture_material(mat, name)
+
+
 def get_material(name):
     mat = bpy.data.materials.get(name)
     if mat is None:
         mat = bpy.data.materials.new(name)
-        color = (*MATERIALS[name], 1.0)
-        mat.diffuse_color = color
-        mat.use_nodes = True
-        mat.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = color
+        _setup_material(mat, name)
     return mat
+
+
+def refresh_materials():
+    """Rebuild existing kit materials, e.g. after the texture library moved.
+    Returns how many came out textured."""
+    textures.clear_cache()
+    count = 0
+    for name in MATERIALS:
+        mat = bpy.data.materials.get(name)
+        if mat:
+            _setup_material(mat, name)
+            count += any(n.type == "TEX_IMAGE" for n in mat.node_tree.nodes)
+    return count
 
 
 class MeshBuilder:
     def __init__(self):
         self.bm = bmesh.new()
         self.mats = []
+        self.upright = set()  # faces whose UVs turn 90 degrees so grain runs up them
 
     def _mat(self, name):
         if name not in self.mats:
@@ -66,12 +95,33 @@ class MeshBuilder:
         idx = self._mat(mat)
         for f in faces:
             f.material_index = idx
+        return faces
 
     def box(self, x0, y0, z0, x1, y1, z1, mat):
-        self.prism([(x0, z0), (x1, z0), (x1, z1), (x0, z1)], y0, y1, mat)
+        faces = self.prism([(x0, z0), (x1, z0), (x1, z1), (x0, z1)], y0, y1, mat)
+        if mat in GRAIN_MATS and z1 - z0 > x1 - x0:
+            self.upright.update(faces)
+
+    def box_uvs(self):
+        """Planar UVs per face in metres, so textures keep one scale on every piece.
+        Walls and slopes get U horizontal and V up the face; flat faces map X/Y."""
+        uv = self.bm.loops.layers.uv.verify()
+        up = Vector((0, 0, 1))
+        for f in self.bm.faces:
+            n = f.normal
+            if abs(n.z) > 0.9:
+                u, v = Vector((1, 0, 0)), Vector((0, 1, 0))
+            else:
+                u = up.cross(n).normalized()
+                v = n.cross(u).normalized()
+            if f in self.upright:
+                u, v = v, -u
+            for loop in f.loops:
+                loop[uv].uv = (loop.vert.co.dot(u), loop.vert.co.dot(v))
 
     def finish(self, name):
         bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces)
+        self.box_uvs()
         me = bpy.data.meshes.new(name)
         self.bm.to_mesh(me)
         self.bm.free()

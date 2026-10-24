@@ -10,7 +10,7 @@ bl_info = {
 
 import bpy
 
-from . import assemble, kit
+from . import assemble, kit, textures
 
 
 class MBG_OT_generate(bpy.types.Operator):
@@ -25,9 +25,37 @@ class MBG_OT_generate(bpy.types.Operator):
         if self.width % 2:
             self.report({"ERROR"}, "Width must be even (roof ridge sits on the grid)")
             return {"CANCELLED"}
+        textures.clear_cache()
         pieces = kit.generate_kit()
         assemble.build_test_building(pieces, self.width, self.depth)
         return {"FINISHED"}
+
+
+class MBG_OT_reload_textures(bpy.types.Operator):
+    bl_idname = "mbg.reload_textures"
+    bl_label = "Reload Textures"
+    bl_description = "Rebuild kit materials from the texture library"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        n = kit.refresh_materials()
+        self.report({"INFO"}, f"{n} of {len(kit.MATERIALS)} materials textured from "
+                              f"{textures.library_dir()}")
+        return {"FINISHED"}
+
+
+class MBG_Preferences(bpy.types.AddonPreferences):
+    bl_idname = __package__
+
+    texture_dir: bpy.props.StringProperty(
+        name="Texture Library",
+        description="Folder of Quixel Mixer exports (MB_TEXTURE_DIR overrides this)",
+        subtype="DIR_PATH",
+        default=textures.DEFAULT_DIR,
+    )
+
+    def draw(self, context):
+        self.layout.prop(self, "texture_dir")
 
 
 class MBG_PT_panel(bpy.types.Panel):
@@ -38,9 +66,10 @@ class MBG_PT_panel(bpy.types.Panel):
 
     def draw(self, context):
         self.layout.operator(MBG_OT_generate.bl_idname)
+        self.layout.operator(MBG_OT_reload_textures.bl_idname)
 
 
-classes = (MBG_OT_generate, MBG_PT_panel)
+classes = (MBG_OT_generate, MBG_OT_reload_textures, MBG_Preferences, MBG_PT_panel)
 
 
 def register():
