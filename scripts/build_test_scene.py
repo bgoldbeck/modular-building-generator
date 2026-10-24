@@ -1,6 +1,9 @@
 """Headless: regenerate blender/modular_kit.blend from the addon code.
 
 blender --background --factory-startup --python scripts/build_test_scene.py [-- preview.png]
+
+Textures come from the addon's library path; set MB_TEXTURE_DIR to override,
+e.g. MB_TEXTURE_DIR=test_textures after scripts/make_fake_textures.py.
 """
 import math
 import os
@@ -35,7 +38,9 @@ track.target = target
 scene.camera = cam
 
 scene.render.engine = "BLENDER_WORKBENCH"
-scene.display.shading.color_type = "MATERIAL"
+textured = any(n.type == "TEX_IMAGE" for m in bpy.data.materials if m.node_tree
+               for n in m.node_tree.nodes)
+scene.display.shading.color_type = "TEXTURE" if textured else "MATERIAL"
 scene.display.shading.light = "STUDIO"
 scene.display.shading.show_shadows = True
 scene.display.shading.show_cavity = True

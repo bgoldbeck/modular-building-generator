@@ -27,6 +27,31 @@ Blender addon for generating modular buildings — medieval houses now, castles 
 Install `modular_building/` as an addon (zip it, Edit > Preferences > Add-ons > Install),
 then View3D sidebar > Modular > Generate Kit + Test Building.
 
+## Textures
+
+Kit materials pick up Quixel Mixer exports from a texture library folder
+(default `\\RANDO_NEWPC\6TB Drive\quixel mixer`; change it in the addon
+preferences, or set `MB_TEXTURE_DIR`). Up to two folders deep, a file is used
+when its path mentions the material's keyword and ends in a map suffix:
+
+| Material | Keywords | Tile |
+| --- | --- | --- |
+| `MB_Plaster` | plaster | 2 m |
+| `MB_Timber` | timber, beam | 1 m |
+| `MB_Stone` | stone, cobble, rock | 2 m |
+| `MB_FloorWood` | floorwood, floor, plank | 1 m |
+| `MB_Shingle` | shingle, roof | 2 m |
+
+Suffixes: `_Albedo`/`_BaseColor`, `_Normal`, `_Roughness`, `_AO`, `_Metalness`
+(e.g. `Old Plaster/Old Plaster_Albedo.png`). A material without a matching
+albedo keeps its flat colour. After changing the library, hit **Reload Textures**.
+
+No library handy? Generate stand-ins laid out the same way:
+
+    python scripts/make_fake_textures.py          # writes test_textures/ (gitignored)
+
 Regenerate `blender/modular_kit.blend` headless:
 
     blender --background --factory-startup --python scripts/build_test_scene.py
+
+Set `MB_TEXTURE_DIR=test_textures` first to build it with the fake textures.
